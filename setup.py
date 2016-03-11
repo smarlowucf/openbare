@@ -33,7 +33,7 @@ if __name__ == '__main__':
         license='GPL-3.0',
         author='James Mason, Robert Schweikert',
         author_email='jmason@suse.com, rjschwei@suse.com',
-        version='0.0.1',
+        version='0.0.2',
         classifiers=[
             'Development Status :: 3 - Alpha',
             'Environment :: Web Environment',
