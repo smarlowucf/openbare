@@ -248,7 +248,7 @@ python manage.py test
 To check code coverage in Django run the following commands:
 
 ```
-coverage run --source='.' manage.py test  # Run unit tests
+coverage run --source='library,mailer,openbare' manage.py test  # Run tests
 coverage report                           # Generate report
 coverage html                             # Generate HTML report
 ```

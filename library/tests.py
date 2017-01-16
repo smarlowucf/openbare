@@ -29,8 +29,8 @@ from library.views import (get_items_checked_out_by, get_lendable_resources,
                            IndexView)
 
 from library.amazon_account_utils import AmazonAccountUtils
-from library.mock_aws.aws_endpoints import AWSMock
-from library.mock_aws.constants import fake_user_name
+
+from mockboto3.iam.endpoints import mock_iam
 
 
 class LibraryTestCase(TestCase):
@@ -242,24 +242,20 @@ class AWSTestCase(TestCase):
         self.assertNotEqual(self.aws_account.username, '???')
         self.assertEqual(len(self.aws_account.username), 20)
 
+    @mock_iam
     def test_aws_checkout(self):
         """Test AWS IAM checkout and checkin.
 
         Mock cleanup method with a return value of True.
         """
         self.c.login(username=self.user.username, password='str0ngpa$$w0rd')
-        mocker = AWSMock()
-        mocker.create_group({'GroupName': 'Admins'})
 
         # Checkout AWS account
-        with self.settings(AWS_ACCOUNT_ID_ALIAS='John.Wayne',
-                           AWS_IAM_GROUP='Admins'):
-            with patch('botocore.client.BaseClient._make_api_call',
-                       new=mocker.mock_make_api_call):
-                # Test check out AWS lendable
-                response = self.c.get(reverse('library:checkout',
-                                              args=['amazondemoaccount']),
-                                      follow=True)
+        with self.settings(AWS_ACCOUNT_ID_ALIAS='John.Wayne'):
+            # Test check out AWS lendable
+            response = self.c.get(reverse('library:checkout',
+                                          args=['amazondemoaccount']),
+                                  follow=True)
 
         # Get lendable and parse due date string
         aws_lendable = self.user.lendable_set.first()
@@ -308,13 +304,10 @@ class AWSTestCase(TestCase):
         message = list(response.context['messages'])[0].message
         self.assertEqual(message, 'Checkin Failed!')
 
-        # Checkin AWS account
-        with patch('botocore.client.BaseClient._make_api_call',
-                   new=mocker.mock_make_api_call):
-            # Test check in AWS lendable
-            response = self.c.get(reverse('library:checkin',
-                                          args=[pk]),
-                                  follow=True)
+        # Test check in AWS lendable
+        response = self.c.get(reverse('library:checkin',
+                                      args=[pk]),
+                              follow=True)
 
         # Confirm success message displayed
         message = list(response.context['messages'])[0].message
@@ -324,53 +317,23 @@ class AWSTestCase(TestCase):
         # Confirm lendable deleted
         self.assertEqual(Lendable.all_types.count(), 0)
 
-        mocker.delete_group({'GroupName': 'Admins'})
-
+    @mock_iam
     def test_checkout_group_exception(self):
-        mocker = AWSMock()
         self.c.login(username=self.user.username, password='str0ngpa$$w0rd')
 
         # Test create IAM account group not found exception handled
-        with patch('botocore.client.BaseClient._make_api_call',
-                   new=mocker.mock_make_api_call):
-            with self.settings(AWS_IAM_GROUP='Admins',
-                               AWS_ACCOUNT_ID_ALIAS=None):
-                response = self.c.get(reverse('library:checkout',
-                                              args=['amazondemoaccount']),
-                                      follow=True)
+        with self.settings(AWS_IAM_GROUP='Admins',
+                           AWS_ACCOUNT_ID_ALIAS=None):
+            response = self.c.get(reverse('library:checkout',
+                                          args=['amazondemoaccount']),
+                                  follow=True)
 
         # Confirm error message displayed
         message = list(response.context['messages'])[0].message
         self.assertEqual(message,
-                         "An error occurred (Not Found) when calling the "
-                         "AddUserToGroup operation: Group Admins not found")
-
-        # Confirm lendable not created
-        self.assertEqual(Lendable.all_types.count(), 0)
-
-    def test_checkout_exception(self):
-        """Test exception from create IAM account is handled properly."""
-        mocker = AWSMock()
-        self.user.username = fake_user_name
-        self.user.save()
-
-        self.c.login(username=self.user.username, password='str0ngpa$$w0rd')
-
-        # Test create IAM account exception handled
-        with patch('botocore.client.BaseClient._make_api_call',
-                   new=mocker.mock_make_api_call):
-            with patch.object(AmazonAccountUtils,
-                              '_cleanup_iam_user',
-                              return_value=True):
-                response = self.c.get(reverse('library:checkout',
-                                              args=['amazondemoaccount']),
-                                      follow=True)
-
-        # Confirm error message displayed
-        message = list(response.context['messages'])[0].message
-        self.assertEqual(message,
-                         "An error occurred (409) when calling the "
-                         "CreateUser operation: User fakeuser exists")
+                         "An error occurred (NoSuchEntity) when calling the "
+                         "AddUserToGroup operation: The group with name Admins"
+                         " cannot be found.")
 
         # Confirm lendable not created
         self.assertEqual(Lendable.all_types.count(), 0)
@@ -385,14 +348,12 @@ class AWSTestCase(TestCase):
         # Confirm 404 displayed
         self.assertEqual(response.status_code, 404)
 
+    @mock_iam
     def test_destroy_account_not_exist(self):
-        mocker = AWSMock()
-        with patch('botocore.client.BaseClient._make_api_call',
-                   new=mocker.mock_make_api_call):
-            amazon_account_utils = AmazonAccountUtils(
-                '43543253245',
-                '6543654rfdfds'
-            )
-            result = amazon_account_utils.destroy_iam_account('john')
+        amazon_account_utils = AmazonAccountUtils(
+            '43543253245',
+            '6543654rfdfds'
+        )
+        result = amazon_account_utils.destroy_iam_account('john')
 
         self.assertFalse(result)
