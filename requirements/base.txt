@@ -1,5 +1,5 @@
 Django~=1.10.0
-python-social-auth
+social-auth-app-django
 django-markdown-deux
 django-split-settings
 boto3
