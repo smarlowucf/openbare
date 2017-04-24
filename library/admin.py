@@ -55,6 +55,7 @@ class LendableAdmin(admin.ModelAdmin):
         'checked_in_on',
         'checked_out_on',
         'type',
+        'unique_id',
         'user',
         'username',
         'notify_timer'

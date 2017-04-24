@@ -277,6 +277,9 @@ class AWSTestCase(TestCase):
         self.assertContains(response,
                             'https://John.Wayne.signin.aws.amazon.com/console')
 
+        # Assert user_id set
+        self.assertIsNotNone(aws_lendable.unique_id)
+
         # Confirm lendable created
         self.assertEqual(Lendable.all_types.count(), 1)
 

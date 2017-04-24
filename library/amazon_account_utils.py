@@ -204,7 +204,7 @@ class AmazonAccountUtils:
             ('Access Key ID', access_key_pair.access_key_id),
             ('Secret Access Key', access_key_pair.secret_access_key)
         ])
-        return credentials
+        return credentials, iam_user.user_id
 
     def destroy_iam_account(self, username):
         """Cleanup and delete IAM user account."""

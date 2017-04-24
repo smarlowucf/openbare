@@ -66,6 +66,7 @@ class Lendable(models.Model):
     due_on = models.DateTimeField()
     notify_timer = models.FloatField(null=True, blank=True)
     renewals = models.IntegerField(default=0)
+    unique_id = models.CharField(max_length=127, null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     username = models.CharField(max_length=320)
     credentials = None
@@ -229,10 +230,11 @@ cloud gives you access to a massive volume of resources on-demand.
         super(AmazonDemoAccount, self).checkout()
         group = getattr(settings, 'AWS_IAM_GROUP', None)
 
-        self.credentials = self.amazon_account_utils.create_iam_account(
-            self.username,
-            group
-        )
+        self.credentials, self.unique_id = \
+            self.amazon_account_utils.create_iam_account(
+                self.username,
+                group
+            )
 
     def checkin(self):
         """Checkin demo account and clean up AWS resources."""
