@@ -19,8 +19,7 @@
 
 from django.contrib import admin
 from django.utils.translation import ugettext_lazy as _
-from library.models import Lendable
-from library.models import FrontpageMessage
+from library.models import FrontpageMessage, Lendable, Resource
 
 from simple_history.admin import SimpleHistoryAdmin
 
@@ -46,9 +45,20 @@ class CheckoutFilter(admin.SimpleListFilter):
             return queryset.filter(checked_in_on__isnull=False)
 
 
+class ResourceInline(admin.TabularInline):
+    model = Resource
+
+    readonly_fields = (
+        'region',
+        'resource_type',
+        'resource_id'
+    )
+
+
 class LendableAdmin(admin.ModelAdmin):
     """Display primary key and str representation in list."""
 
+    inlines = [ResourceInline]
     list_filter = (CheckoutFilter,)
     list_display = ('pk', '__str__')
     readonly_fields = (

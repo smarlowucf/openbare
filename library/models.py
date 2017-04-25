@@ -275,3 +275,14 @@ class FrontpageMessage(models.Model):
 
     class Meta:
         ordering = ['rank', '-updated_at']
+
+
+class Resource(models.Model):
+    lendable = models.ForeignKey(
+        Lendable,
+        on_delete=models.CASCADE,
+        related_name='resources'
+    )
+    region = models.CharField(max_length=63)
+    resource_type = models.CharField(max_length=63)
+    resource_id = models.CharField(max_length=127)
