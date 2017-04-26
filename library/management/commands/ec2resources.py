@@ -38,7 +38,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         collected = defaultdict(list)
-        for region in ['us-west-2']:
+        for region in get_available_regions('cloudtrail'):
             # Check all available cloudtrail regions for events
             MAX_RESULTS = 50
             cloud_trail = boto3.client('cloudtrail', region_name=region)
@@ -84,7 +84,7 @@ class Command(BaseCommand):
                         if user_type == 'Root':
                             # No openbare user exists to store
                             # root account events
-                            continue
+                            user = principal
 
                         elif user_type == 'IAMUser':
                             user = detail['userIdentity']['userName']
@@ -134,21 +134,26 @@ class Command(BaseCommand):
 
         for username, resources in collected.items():
             # import pdb;pdb.set_trace()
-            lendable = Lendable.all_types.get(username=username)
-            lendable_resources = []
-            for resource in resources:
-                lendable_resources.append(
-                    Resource(
-                        lendable=lendable,
-                        region=resource['region'],
-                        resource_type=resource['type'],
-                        resource_id=resource['id']
+            try:
+                lendable = Lendable.all_types.get(username=username)
+            except:
+                print(resources)
+                self.stdout.write('%s not found.' % username)
+            else:
+                lendable_resources = []
+                for resource in resources:
+                    lendable_resources.append(
+                        Resource(
+                            lendable=lendable,
+                            region=resource['region'],
+                            resource_type=resource['type'],
+                            resource_id=resource['id']
+                        )
+                    )
+                lendable.resources.bulk_create(lendable_resources)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        'Logged %i resource(s) for lendable with username: %s'
+                        % (len(lendable_resources), username)
                     )
                 )
-            lendable.resources.bulk_create(lendable_resources)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    'Logged %i resource(s) for lendable with username: %s'
-                    % (len(lendable_resources), username)
-                )
-            )
