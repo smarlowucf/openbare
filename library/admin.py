@@ -18,6 +18,8 @@
 # along with openbare. If not, see <http://www.gnu.org/licenses/>.
 
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.translation import ugettext_lazy as _
 from library.models import FrontpageMessage, Lendable, Resource
 
@@ -43,6 +45,13 @@ class CheckoutFilter(admin.SimpleListFilter):
 
         if self.value() == 'returned':
             return queryset.filter(checked_in_on__isnull=False)
+
+
+class FrontpageMessageAdmin(SimpleHistoryAdmin):
+    """List frontpage messages by rank and title"""
+
+    list_display = ('pk', 'rank', 'title')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 class ResourceInline(admin.TabularInline):
@@ -80,12 +89,25 @@ class LendableAdmin(admin.ModelAdmin):
         return query_set
 
 
-class FrontpageMessageAdmin(SimpleHistoryAdmin):
-    """List frontpage messages by rank and title"""
+class ResourceAdmin(admin.ModelAdmin):
+    list_display = ('pk', '__str__', 'lendable_checkout')
+    readonly_fields = (
+        'region',
+        'resource_type',
+        'resource_id'
+    )
 
-    list_display = ('pk', 'rank', 'title')
-    readonly_fields = ('created_at', 'updated_at')
+    def lendable_checkout(self, obj):
+        change_url = reverse(
+            'admin:library_lendable_change',
+            args=(obj.lendable.id,)
+        )
+        return format_html(
+            u"<a href='%s'>%s</a>" % (change_url, obj.lendable.id)
+        )
+    lendable_checkout.empty_value_display = 'None'
 
 
-admin.site.register(Lendable, LendableAdmin)
 admin.site.register(FrontpageMessage, FrontpageMessageAdmin)
+admin.site.register(Lendable, LendableAdmin)
+admin.site.register(Resource, ResourceAdmin)

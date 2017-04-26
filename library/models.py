@@ -281,8 +281,13 @@ class Resource(models.Model):
     lendable = models.ForeignKey(
         Lendable,
         on_delete=models.CASCADE,
-        related_name='resources'
+        related_name='resources',
+        null=True,
+        blank=True
     )
     region = models.CharField(max_length=63)
     resource_type = models.CharField(max_length=63)
     resource_id = models.CharField(max_length=127)
+
+    def __str__(self):
+        return self.resource_id

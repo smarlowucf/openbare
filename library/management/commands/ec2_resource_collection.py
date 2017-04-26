@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright © 2016 SUSE LLC, Robert Schweikert <rjschwei@suse.com>,
-# James Mason <jmason@suse.com>.
+# Copyright © 2017 SUSE LLC.
 #
 # This file is part of openbare.
 #
@@ -27,21 +26,29 @@ from django.core.management.base import BaseCommand
 from library.models import Lendable, Resource
 
 
-def get_available_regions(service):
+def get_available_regions(service, session):
     """List available regions for service."""
-    session = boto3.Session()
     return session.get_available_regions(service)
 
 
 class Command(BaseCommand):
-    help = 'Collect all resources for EC2 lendables.'
+    help = 'Collect all created resources for EC2 lendables.'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--profile',
+            dest='profile',
+            default='default',
+            help='Boto3 profile to use.'
+        )
 
     def handle(self, *args, **options):
         collected = defaultdict(list)
-        for region in get_available_regions('cloudtrail'):
+        session = boto3.Session(profile_name=options['profile'])
+        for region in get_available_regions('cloudtrail', session):
             # Check all available cloudtrail regions for events
             MAX_RESULTS = 50
-            cloud_trail = boto3.client('cloudtrail', region_name=region)
+            cloud_trail = session.client('cloudtrail', region_name=region)
             event_triggers = [
                 'CreateVolume',
                 'RunInstances',
@@ -82,8 +89,6 @@ class Command(BaseCommand):
                         user_type = detail['userIdentity']['type']
 
                         if user_type == 'Root':
-                            # No openbare user exists to store
-                            # root account events
                             user = principal
 
                         elif user_type == 'IAMUser':
@@ -133,27 +138,34 @@ class Command(BaseCommand):
                             collected[user].append(resource)
 
         for username, resources in collected.items():
-            # import pdb;pdb.set_trace()
             try:
                 lendable = Lendable.all_types.get(username=username)
             except:
-                print(resources)
-                self.stdout.write('%s not found.' % username)
-            else:
-                lendable_resources = []
-                for resource in resources:
-                    lendable_resources.append(
-                        Resource(
-                            lendable=lendable,
-                            region=resource['region'],
-                            resource_type=resource['type'],
-                            resource_id=resource['id']
-                        )
+                lendable = None
+
+            lendable_resources = []
+            for resource in resources:
+                lendable_resources.append(
+                    Resource(
+                        lendable=lendable,
+                        region=resource['region'],
+                        resource_type=resource['type'],
+                        resource_id=resource['id']
                     )
+                )
+            if lendable:
                 lendable.resources.bulk_create(lendable_resources)
                 self.stdout.write(
                     self.style.SUCCESS(
-                        'Logged %i resource(s) for lendable with username: %s'
-                        % (len(lendable_resources), username)
+                        'Logged %i resource(s) for lendable with username:'
+                        ' %s.' % (len(lendable_resources), username)
+                    )
+                )
+            else:
+                Resource.objects.bulk_create(lendable_resources)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        'Logged %i resource(s) with no lendable.'
+                        % len(lendable_resources)
                     )
                 )
