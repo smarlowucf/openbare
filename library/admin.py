@@ -21,7 +21,12 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import ugettext_lazy as _
-from library.models import FrontpageMessage, Lendable, Resource
+from library.models import (
+    FrontpageMessage,
+    Lendable,
+    ManagementCommand,
+    Resource
+)
 
 from simple_history.admin import SimpleHistoryAdmin
 
@@ -45,13 +50,6 @@ class CheckoutFilter(admin.SimpleListFilter):
 
         if self.value() == 'returned':
             return queryset.filter(checked_in_on__isnull=False)
-
-
-class FrontpageMessageAdmin(SimpleHistoryAdmin):
-    """List frontpage messages by rank and title"""
-
-    list_display = ('pk', 'rank', 'title')
-    readonly_fields = ('created_at', 'updated_at')
 
 
 class ResourceInline(admin.TabularInline):
@@ -89,9 +87,40 @@ class LendableAdmin(admin.ModelAdmin):
         return query_set
 
 
+class FrontpageMessageAdmin(SimpleHistoryAdmin):
+    """List frontpage messages by rank and title"""
+
+    list_display = ('pk', 'rank', 'title')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+class ManagementCommandAdmin(admin.ModelAdmin):
+    list_display = ('pk', 'command_name', 'last_run')
+    readonly_fields = ('command_name',)
+
+
+class ResourceFilter(admin.SimpleListFilter):
+    """Provide filter to query resources without lendable."""
+    title = _('resource filter')
+    parameter_name = 'lendable'
+
+    def lookups(self, request, model_admin):
+        """The options for filter(value, display)."""
+        return (
+            ('nolendable', _('no lendable')),
+        )
+
+    def queryset(self, request, queryset):
+        """Filter queryset based on value."""
+        if self.value() == 'nolendable':
+            return queryset.filter(lendable__isnull=True)
+
+
 class ResourceAdmin(admin.ModelAdmin):
-    list_display = ('pk', '__str__', 'lendable_checkout')
+    list_display = ('pk', '__str__', 'resource_type', 'lendable_checkout')
+    list_filter = ('resource_type', ResourceFilter)
     readonly_fields = (
+        'lendable',
         'region',
         'resource_type',
         'resource_id'
@@ -112,4 +141,5 @@ class ResourceAdmin(admin.ModelAdmin):
 
 admin.site.register(FrontpageMessage, FrontpageMessageAdmin)
 admin.site.register(Lendable, LendableAdmin)
+admin.site.register(ManagementCommand, ManagementCommandAdmin)
 admin.site.register(Resource, ResourceAdmin)

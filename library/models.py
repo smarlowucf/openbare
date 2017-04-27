@@ -291,3 +291,24 @@ class Resource(models.Model):
 
     def __str__(self):
         return self.resource_id
+
+
+class ManagementCommand(models.Model):
+    command_name = models.CharField(max_length=127, unique=True)
+    last_run = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return self.command_name
+
+    @classmethod
+    def get_last_run_time(cls, command_name):
+        command, created = cls.objects.get_or_create(
+            command_name=command_name
+        )
+        return command.last_run
+
+    @classmethod
+    def update_last_run_time(cls, command_name, run_time):
+        command = cls.objects.get(command_name=command_name)
+        command.last_run = run_time
+        command.save()

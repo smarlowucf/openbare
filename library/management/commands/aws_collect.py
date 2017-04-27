@@ -20,10 +20,21 @@
 
 import boto3
 import json
+import logging
 
 from collections import defaultdict
+from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
-from library.models import Lendable, Resource
+from django.utils.timezone import UTC
+from library.models import Lendable, ManagementCommand, Resource
+
+EVENT_TRIGGERS = [
+    'CreateVolume',
+    'RunInstances',
+    'CreateImage',
+    'CreateSnapshot'
+]
+MODULE_NAME = __name__.split('.')[-1]
 
 
 def get_available_regions(service, session):
@@ -33,6 +44,7 @@ def get_available_regions(service, session):
 
 class Command(BaseCommand):
     help = 'Collect all created resources for EC2 lendables.'
+    logger = logging.getLogger(MODULE_NAME)
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -43,18 +55,19 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # determine current run time and previous run time
+        run_time = datetime.now(UTC())
+        last_run_time = ManagementCommand.get_last_run_time(MODULE_NAME)
+        if not last_run_time:
+            last_run_time = run_time - timedelta(days=7)
+
+        self.logger.debug('Collecting AWS resources')
         collected = defaultdict(list)
         session = boto3.Session(profile_name=options['profile'])
         for region in get_available_regions('cloudtrail', session):
             # Check all available cloudtrail regions for events
             MAX_RESULTS = 50
             cloud_trail = session.client('cloudtrail', region_name=region)
-            event_triggers = [
-                'CreateVolume',
-                'RunInstances',
-                'CreateImage',
-                'CreateSnapshot'
-            ]
 
             results_left = True
             token = None
@@ -63,11 +76,13 @@ class Command(BaseCommand):
                 # loop through each page until no next token.
                 if token:
                     events = cloud_trail.lookup_events(
+                        StartTime=last_run_time,
                         MaxResults=MAX_RESULTS,
                         NextToken=token
                     )
                 else:
                     events = cloud_trail.lookup_events(
+                        StartTime=last_run_time,
                         MaxResults=MAX_RESULTS
                     )
 
@@ -78,13 +93,12 @@ class Command(BaseCommand):
                     results_left = False
 
                 for event in events['Events']:
-                    if event['EventName'] in event_triggers:
+                    if event['EventName'] in EVENT_TRIGGERS:
                         # If the event is in triggers list log it.
                         event_name = event['EventName']
                         detail = json.loads(event['CloudTrailEvent'])
 
                         region = detail['awsRegion']
-                        # arn = detail['userIdentity']['arn']
                         principal = detail['userIdentity']['principalId']
                         user_type = detail['userIdentity']['type']
 
@@ -137,13 +151,14 @@ class Command(BaseCommand):
 
                             collected[user].append(resource)
 
+        lendable_resources = []
         for username, resources in collected.items():
+            # Create list of resource objects
             try:
                 lendable = Lendable.all_types.get(username=username)
             except:
                 lendable = None
 
-            lendable_resources = []
             for resource in resources:
                 lendable_resources.append(
                     Resource(
@@ -153,19 +168,12 @@ class Command(BaseCommand):
                         resource_id=resource['id']
                     )
                 )
-            if lendable:
-                lendable.resources.bulk_create(lendable_resources)
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        'Logged %i resource(s) for lendable with username:'
-                        ' %s.' % (len(lendable_resources), username)
-                    )
-                )
-            else:
-                Resource.objects.bulk_create(lendable_resources)
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        'Logged %i resource(s) with no lendable.'
-                        % len(lendable_resources)
-                    )
-                )
+
+        # Bulk create all new resources
+        Resource.objects.bulk_create(lendable_resources)
+        message = 'Logged %i resource(s)' % len(lendable_resources)
+        self.stdout.write(self.style.SUCCESS(message))
+        self.logger.debug(message)
+
+        # update last run time for command
+        ManagementCommand.update_last_run_time(MODULE_NAME, run_time)
