@@ -98,13 +98,15 @@ class ResourceAdmin(admin.ModelAdmin):
     )
 
     def lendable_checkout(self, obj):
-        change_url = reverse(
-            'admin:library_lendable_change',
-            args=(obj.lendable.id,)
-        )
-        return format_html(
-            u"<a href='%s'>%s</a>" % (change_url, obj.lendable.id)
-        )
+        if obj.lendable:
+            change_url = reverse(
+                'admin:library_lendable_change',
+                args=(obj.lendable.id,)
+            )
+            return format_html(
+                u"<a href='%s'>%s</a>" % (change_url, obj.lendable.id)
+            )
+        return None
     lendable_checkout.empty_value_display = 'None'
 
 
