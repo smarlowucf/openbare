@@ -27,6 +27,8 @@ from django.conf import settings
 
 from logging import CRITICAL, ERROR, WARNING, INFO
 
+PRESERVE_TAG = {'Key': 'preserve', 'Value': 'preserve'}
+
 
 class AmazonAccountUtils:
     """AWS lendable utils class."""
@@ -80,12 +82,23 @@ class AmazonAccountUtils:
         random.shuffle(password_set)
         return ''.join(password_set)[:length]
 
-    def _get_aws_session(self):
+    def _get_aws_session(self, region=None):
         self.log('opening session')
-        return boto3.session.Session(
+        if region:
+            return boto3.Session(
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key,
+                region_name=region
+            )
+        return boto3.Session(
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key
         )
+
+    def _get_ec2_resource(self, region):
+        session = self._get_aws_session(region)
+        self.log('accessing ec2 resource')
+        return session.resource('ec2')
 
     def _get_iam_resource(self, session=None):
         if not session:
@@ -216,3 +229,115 @@ class AmazonAccountUtils:
             return True
         else:
             return False
+
+    def cleanup_resources(self, lendable):
+        resources = collections.defaultdict(list)
+        for resource in lendable.resources.all():
+            resources[resource.region].append(resource)
+
+        for region, resource_list in resources.items():
+            ec2 = self._get_ec2_resource(region)
+            # Sort all image types prior to snapshots.
+            # Snapshots cannot be deleted if used by an image.
+            sorted(resource_list, key=lambda res: res.resource_type)
+            for resource in resource_list:
+                if resource.resource_type == 'image':
+                    image = ec2.Image(resource.resource_id)
+                    try:
+                        image.state
+                    except AttributeError:
+                        self.log(
+                            'Image %s not found' % image.id,
+                            INFO
+                        )
+                    else:
+                        if image.tags and PRESERVE_TAG in image.tags:
+                            self.log(
+                                'Image %s preserved' % image.id,
+                                INFO
+                            )
+                            resource.lendable = None
+                            resource.save()
+                        else:
+                            image.deregister()
+                            self.log(
+                                'Image %s deregistered' % image.id,
+                                INFO
+                            )
+                elif resource.resource_type == 'instance':
+                    inst = ec2.Instance(resource.resource_id)
+                    try:
+                        inst.state
+                    except AttributeError:
+                        self.log(
+                            'Instance %s not found' % inst.id,
+                            INFO
+                        )
+                    else:
+                        if inst.tags and PRESERVE_TAG in inst.tags:
+                            self.log(
+                                'Instance %s preserved' % inst.id,
+                                INFO
+                            )
+                            resource.lendable = None
+                            resource.save()
+                        else:
+                            inst.terminate()
+                            self.log(
+                                'Instance %s terminated' % inst.id,
+                                INFO
+                            )
+                elif resource.resource_type == 'snapshot':
+                    snapshot = ec2.Snapshot(resource.resource_id)
+                    try:
+                        snapshot.state
+                    except AttributeError:
+                        self.log(
+                            'Snapshot %s not found' % snapshot.id,
+                            INFO
+                        )
+                    else:
+                        if snapshot.tags and PRESERVE_TAG in snapshot.tags:
+                            self.log(
+                                'Snapshot %s preserved' % snapshot.id,
+                                INFO
+                            )
+                            resource.lendable = None
+                            resource.save()
+                        else:
+                            try:
+                                snapshot.delete()
+                            except:
+                                self.log(
+                                    'Could not delete snapshot %s'
+                                    % snapshot.id,
+                                    INFO
+                                )
+                            else:
+                                self.log(
+                                    'Snapshot %s deleted' % snapshot.id,
+                                    INFO
+                                )
+                elif resource.resource_type == 'volume':
+                    volume = ec2.Volume(resource.resource_id)
+                    try:
+                        volume.state
+                    except AttributeError:
+                        self.log(
+                            'Volume %s not found' % volume.id,
+                            INFO
+                        )
+                    else:
+                        if volume.tags and PRESERVE_TAG in volume.tags:
+                            self.log(
+                                'Volume %s preserved' % volume.id,
+                                INFO
+                            )
+                            resource.lendable = None
+                            resource.save()
+                        else:
+                            volume.delete()
+                            self.log(
+                                'Volume %s deleted' % volume.id,
+                                INFO
+                            )

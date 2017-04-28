@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core import management
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.utils.crypto import get_random_string
 from django.utils.translation import ugettext_lazy as _
@@ -238,6 +239,8 @@ cloud gives you access to a massive volume of resources on-demand.
         """Checkin demo account and clean up AWS resources."""
         super(AmazonDemoAccount, self).checkin()
         self.amazon_account_utils.destroy_iam_account(self.username)
+        management.call_command('aws_collect', interactive=False)
+        self.amazon_account_utils.cleanup_resources(self)
 
     def _set_username(self):
         """Normalize username to remove none ascii chars and validate."""

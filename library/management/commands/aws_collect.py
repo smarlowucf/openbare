@@ -135,7 +135,7 @@ class Command(BaseCommand):
                                 resource['id'] = (
                                     detail['responseElements']['volumeId']
                                 )
-                                resource['type'] = 'vol'
+                                resource['type'] = 'volume'
 
                             elif event_name == 'CreateImage':
                                 resource['id'] = (
